@@ -87,6 +87,7 @@ def main():
 
     # запрос статуса с payload == (current_timestamp - месяц)
     month_ago = (current_timestamp - SECONDS_PER_MONTH,)
+    pause = 10
     while True:
         try:
             current_state = get_homeworks(month_ago)
@@ -96,16 +97,17 @@ def main():
             logger.info('Бот отправляет сообщение '
                         'об ошибке в своей работе')
             send_message(f'Бот упал с ошибкой: {e}')
-
+            time.sleep(pause)
+            pause += 5
+        else:
             last_status = parse_current_state(current_state)
             last_timestamp = current_state['current_date']
 
             logger.info('Бот отправляет сообщение')
-            send_message(last_status)
-            time.sleep(5)
-        else:
+            send_message(last_status)            
             break
 
+    pause = 10
     while True:
         try:
             current_state = get_homeworks(last_timestamp)
@@ -124,7 +126,8 @@ def main():
                         'об ошибке в своей работе')
             send_message(f'Бот упал с ошибкой: {e}')
 
-            time.sleep(5)
+            time.sleep(pause)
+            pause += 5
 
 
 if __name__ == '__main__':
