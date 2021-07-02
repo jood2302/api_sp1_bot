@@ -21,8 +21,8 @@ HW_APPROVED_STATUS = 'approved'
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 logger = logging.getLogger(__name__)
-_log_format = (f'%(asctime)s - [%(levelname)s] - %(name)s - '
-               f'(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s')
+_log_format = ('%(asctime)s - [%(levelname)s] - %(name)s - '
+               '(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s')
 logging.basicConfig(
     level=logging.DEBUG
 )
@@ -63,7 +63,7 @@ def parse_homework_status(last_hw):
 
 def parse_current_state(hw_state):
     if len(hw_state['homeworks']) == 0:
-        return f'Не найдено статусов проверки работы'
+        return 'Не найдено статусов проверки работы'
     return parse_homework_status(hw_state['homeworks'][0])
 
 
@@ -101,6 +101,7 @@ def main():
                 logger.info('Бот отправляет сообщение '
                             'об изменении статуса ДЗ')
                 send_message(last_status)
+            last_status = current_status
 
             time.sleep(20 * 60)  # Опрашивать раз в двадцать минут
 
