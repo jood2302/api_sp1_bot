@@ -20,7 +20,7 @@ HW_APPROVED_STATUS = 'approved'
 
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 _log_format = f"%(asctime)s - [%(levelname)s] - %(name)s - (%(filename)s).%(funcName)s(%(lineno)d) - %(message)s"
 logging.basicConfig(
     level=logging.DEBUG    
