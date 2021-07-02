@@ -91,7 +91,7 @@ def main():
     while True:
         try:
             current_state = get_homeworks(month_ago)
-        
+
         except Exception as e:
             logger.error(f'Бот упал с ошибкой: {e}')
             logger.info('Бот отправляет сообщение '
@@ -104,7 +104,7 @@ def main():
             last_timestamp = current_state['current_date']
 
             logger.info('Бот отправляет сообщение')
-            send_message(last_status)            
+            send_message(last_status)
             break
 
     pause = 10
