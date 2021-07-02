@@ -1,9 +1,10 @@
+import logging
 import os
 import time
+
 import requests
 import telegram
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
@@ -19,8 +20,36 @@ HW_APPROVED_STATUS = 'approved'
 
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
+logger = logging.get_logger(__name__)
+_log_format = f"%(asctime)s - [%(levelname)s] - %(name)s - (%(filename)s).%(funcName)s(%(lineno)d) - %(message)s"
+logging.basicConfig(
+    level=logging.DEBUG    
+)
 
-def parse_homework_status(last_hw):
+
+def get_file_handler():
+    file_handler = logging.RotatingFileHandler(
+        "telegram_bot.log", maxBytes=5000000, backupCount=5
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(logging.Formatter(_log_format))
+    return file_handler
+
+def get_stream_handler():
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.DEBUG)
+    stream_handler.setFormatter(logging.Formatter(_log_format))
+    return stream_handler
+
+def get_logger(name):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(get_file_handler())
+    logger.addHandler(get_stream_handler())
+    return logger
+
+
+def parse_homework_status(last_hw) ->str:
     homework_name = last_hw['homework_name']
     if last_hw['status'] == HW_REJECT_STATUS: # "status":"rejected" in .json()
         verdict = 'К сожалению, в работе нашлись ошибки.'
@@ -48,19 +77,36 @@ def send_message(message):
 
 
 def main():
+    logger.debug("Бот стартует")
+    last_status = ''
     current_timestamp = int(time.time())  # Начальное значение timestamp
+
+    # запрос статуса с payload == (current_timestamp - месяц)
+    month_ago = (current_timestamp - SECONDS_PER_MONTH,)
+    current_state = get_homeworks(month_ago)
+    last_status = parse_current_state(current_state)
+    last_timestamp = current_state['current_date']
+
+    logger.info('Бот отправляет сообщение')
+    send_message(last_status)
 
     while True:
         try:
-            # запрос статуса с payload == (current_timestamp - месяц)
-            month_ago = (current_timestamp - SECONDS_PER_MONTH,)
-            current_state = get_homeworks(month_ago)
-            parse_current_state(current_state)
+            current_state = get_homeworks(last_timestamp)
+            current_status = parse_current_state(current_state)
+            if last_status != current_status:
+                logger.info('Бот отправляет сообщение '
+                            'об изменении статуса ДЗ')
+                send_message(last_status)
 
             time.sleep(20 * 60)  # Опрашивать раз в двадцать минут
 
         except Exception as e:
-            print(f'Бот упал с ошибкой: {e}')
+            logger.error(f'Бот упал с ошибкой: {e}')
+            logger.info('Бот отправляет сообщение '
+                        'об ошибке в своей работе')
+            send_message(f'Бот упал с ошибкой: {e}')
+            
             time.sleep(5)
 
 
