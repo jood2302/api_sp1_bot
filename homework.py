@@ -59,7 +59,7 @@ def parse_homework_status(last_hw) ->str:
 
 
 def parse_current_state(hw_state):
-    if len(hw_state['homeworks'] == 0):
+    if len(hw_state['homeworks']) == 0:
         return f'Не найдено статусов проверки работы'
     return parse_homework_status(hw_state['homeworks'][0])
 
