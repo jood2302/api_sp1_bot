@@ -82,24 +82,29 @@ def send_message(message):
 def main():
     logger.debug("Бот стартует")
     last_status = ''
+    current_state = ''
     current_timestamp = int(time.time())  # Начальное значение timestamp
 
     # запрос статуса с payload == (current_timestamp - месяц)
     month_ago = (current_timestamp - SECONDS_PER_MONTH,)
-    try:
-        current_state = get_homeworks(month_ago)
-    
-    except Exception as e:
-        logger.error(f'Бот упал с ошибкой: {e}')
-        logger.info('Бот отправляет сообщение '
-                    'об ошибке в своей работе')
-        send_message(f'Бот упал с ошибкой: {e}')
-    
-    last_status = parse_current_state(current_state)
-    last_timestamp = current_state['current_date']
+    while True:
+        try:
+            current_state = get_homeworks(month_ago)
+        
+        except Exception as e:
+            logger.error(f'Бот упал с ошибкой: {e}')
+            logger.info('Бот отправляет сообщение '
+                        'об ошибке в своей работе')
+            send_message(f'Бот упал с ошибкой: {e}')
 
-    logger.info('Бот отправляет сообщение')
-    send_message(last_status)
+            last_status = parse_current_state(current_state)
+            last_timestamp = current_state['current_date']
+
+            logger.info('Бот отправляет сообщение')
+            send_message(last_status)
+            time.sleep(5)
+        else:
+            break
 
     while True:
         try:
