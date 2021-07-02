@@ -21,9 +21,10 @@ HW_APPROVED_STATUS = 'approved'
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 logger = logging.getLogger(__name__)
-_log_format = f"%(asctime)s - [%(levelname)s] - %(name)s - (%(filename)s).%(funcName)s(%(lineno)d) - %(message)s"
+_log_format = (f'%(asctime)s - [%(levelname)s] - %(name)s - '
+               f'(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s')
 logging.basicConfig(
-    level=logging.DEBUG    
+    level=logging.DEBUG
 )
 
 
@@ -35,11 +36,13 @@ def get_file_handler():
     file_handler.setFormatter(logging.Formatter(_log_format))
     return file_handler
 
+
 def get_stream_handler():
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(logging.DEBUG)
     stream_handler.setFormatter(logging.Formatter(_log_format))
     return stream_handler
+
 
 def get_logger(name):
     logger = logging.getLogger(name)
@@ -49,7 +52,7 @@ def get_logger(name):
     return logger
 
 
-def parse_homework_status(last_hw) ->str:
+def parse_homework_status(last_hw):
     homework_name = last_hw['homework_name']
     if last_hw['status'] == HW_REJECT_STATUS:
         verdict = 'К сожалению, в работе нашлись ошибки.'
@@ -106,7 +109,7 @@ def main():
             logger.info('Бот отправляет сообщение '
                         'об ошибке в своей работе')
             send_message(f'Бот упал с ошибкой: {e}')
-            
+
             time.sleep(5)
 
 
