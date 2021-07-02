@@ -86,7 +86,15 @@ def main():
 
     # запрос статуса с payload == (current_timestamp - месяц)
     month_ago = (current_timestamp - SECONDS_PER_MONTH,)
-    current_state = get_homeworks(month_ago)
+    try:
+        current_state = get_homeworks(month_ago)
+    
+    except Exception as e:
+        logger.error(f'Бот упал с ошибкой: {e}')
+        logger.info('Бот отправляет сообщение '
+                    'об ошибке в своей работе')
+        send_message(f'Бот упал с ошибкой: {e}')
+    
     last_status = parse_current_state(current_state)
     last_timestamp = current_state['current_date']
 
