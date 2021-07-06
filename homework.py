@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import sys
 
 import requests
 import telegram
@@ -8,104 +9,96 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PRAKTIKUM_TOKEN = os.getenv('PRAKTIKUM_TOKEN')
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-PRAKTIKUM_API_URL = ('https://praktikum.yandex.ru/'
-                     'api/user_api/homework_statuses/')
-# секунд в месяце (30 * 24 * 60 * 60) ~ 2600000
-SECONDS_PER_MONTH = 2600000
-HW_REJECT_STATUS = 'rejected'
-HW_APPROVED_STATUS = 'approved'
-
-bot = telegram.Bot(token=TELEGRAM_TOKEN)
+PRAKTIKUM_TOKEN = ''
+TELEGRAM_TOKEN = ''
+CHAT_ID = ''
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_FILE = os.path.join(BASE_DIR, 'telegram_bot.log')
 
 logger = logging.getLogger(__name__)
 _log_format = ('%(asctime)s - [%(levelname)s] - %(name)s - '
                '(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s')
 logging.basicConfig(
-    level=logging.DEBUG
+    level=logging.INFO,
+    format=_log_format
 )
 
+logger.debug("Бот стартует")
 
-def get_file_handler():
-    file_handler = logging.RotatingFileHandler(
-        "telegram_bot.log", maxBytes=5000000, backupCount=5
+# есть ли осевые environments
+# если чего-то нет - ошибку в лог и завершение работы
+try:
+    env_variables = os.environ    
+except Exception as e:
+    logger.error(f'{e}, Ошибка os.environ, бот завершает работу.')
+    sys.exit(1)
+
+try:
+    PRAKTIKUM_TOKEN = env_variables['PRAKTIKUM_TOKEN']
+    TELEGRAM_TOKEN = env_variables['TELEGRAM_TOKEN']
+    CHAT_ID = env_variables['TELEGRAM_CHAT_ID']
+except KeyError as e:
+    logger.error(f'{e}, Не прочитаны секреты, бот завершает работу.')
+    sys.exit(2)
+
+if not all((PRAKTIKUM_TOKEN, TELEGRAM_TOKEN, CHAT_ID)):
+    logger.error(
+        'Find null secret(s)',
+        'Есть пустой секрет, бот завершает работу.'
     )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter(_log_format))
-    return file_handler
+    sys.exit(3)
+    
+bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
+PRAKTIKUM_API_URL = ('https://praktikum.yandex.ru/'
+                     'api/user_api/homework_statuses/')
+HEADERS = {'Authorization': f'OAuth {PRAKTIKUM_TOKEN}'}
 
-def get_stream_handler():
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.DEBUG)
-    stream_handler.setFormatter(logging.Formatter(_log_format))
-    return stream_handler
-
-
-def get_logger(name):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(get_file_handler())
-    logger.addHandler(get_stream_handler())
-    return logger
+HW_STATUSES = {
+    'rejected': 'К сожалению, в работе нашлись ошибки.',
+    'approved': 'Ревьюеру всё понравилось, работа зачтена!',
+    'reviewing': 'Работа отправилась на ревью.'
+}
 
 
 def parse_homework_status(last_hw):
     homework_name = last_hw['homework_name']
-    if last_hw['status'] == HW_REJECT_STATUS:
-        verdict = 'К сожалению, в работе нашлись ошибки.'
-    else:
-        verdict = 'Ревьюеру всё понравилось, работа зачтена!'
+    status = last_hw['status']
+    
+    verdict = 'От АПИ домашки получен неизвестный статус.'
+        
     return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
 
 
 def parse_current_state(hw_state):
-    if len(hw_state['homeworks']) == 0:
+    if not hw_state['homeworks']:
         return 'Не найдено статусов проверки работы'
     return parse_homework_status(hw_state['homeworks'][0])
 
 
 def get_homeworks(current_timestamp):
-    url = PRAKTIKUM_API_URL
-    headers = {'Authorization': f'OAuth {PRAKTIKUM_TOKEN}'}
+    url = PRAKTIKUM_API_URL    
     payload = {'from_date': current_timestamp}
-    homework_statuses = requests.get(url, headers=headers, params=payload)
+    homework_statuses = requests.get(url, headers=HEADERS, params=payload)
     return homework_statuses.json()
 
 
 def send_message(message):
     return bot.send_message(CHAT_ID, message)
 
+def log_send_err_message(exception, err_description):
+    message = f'Бот упал с ошибкой: {exception} {err_description}'
+    logger.error(message)
+    logger.info('Бот отправляет в Телеграм сообщение '
+                'об ошибке в своей работе')
+    send_message(message)
+    return
 
 def main():
-    logger.debug("Бот стартует")
+
     last_status = ''
     current_state = ''
     current_timestamp = int(time.time())  # Начальное значение timestamp
-
-    # запрос статуса с payload == (current_timestamp - месяц)
-    month_ago = (current_timestamp - SECONDS_PER_MONTH,)
-    pause = 10
-    while True:
-        try:
-            current_state = get_homeworks(month_ago)
-
-        except Exception as e:
-            logger.error(f'Бот упал с ошибкой: {e}')
-            logger.info('Бот отправляет сообщение '
-                        'об ошибке в своей работе')
-            send_message(f'Бот упал с ошибкой: {e}')
-            time.sleep(pause)
-            pause += 5
-        else:
-            last_status = parse_current_state(current_state)
-            last_timestamp = current_state['current_date']
-
-            logger.info('Бот отправляет сообщение')
-            send_message(last_status)
-            break
 
     pause = 10
     while True:
