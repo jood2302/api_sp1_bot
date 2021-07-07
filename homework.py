@@ -1,7 +1,9 @@
+import json
 import logging
 import os
-import time
 import sys
+import time
+from logging.handlers import RotatingFileHandler
 
 import requests
 import telegram
@@ -22,31 +24,23 @@ logging.basicConfig(
     level=logging.INFO,
     format=_log_format
 )
+handler = RotatingFileHandler(LOG_FILE, maxBytes=5000000, backupCount=5)
+logger.addHandler(handler) 
 
 logger.debug("Бот стартует")
 
 # есть ли осевые environments
 # если чего-то нет - ошибку в лог и завершение работы
-try:
-    env_variables = os.environ    
-except Exception as e:
-    logger.error(f'{e}, Ошибка os.environ, бот завершает работу.')
-    sys.exit(1)
-
+env_variables = os.environ
 try:
     PRAKTIKUM_TOKEN = env_variables['PRAKTIKUM_TOKEN']
     TELEGRAM_TOKEN = env_variables['TELEGRAM_TOKEN']
     CHAT_ID = env_variables['TELEGRAM_CHAT_ID']
 except KeyError as e:
     logger.error(f'{e}, Не прочитаны секреты, бот завершает работу.')
-    sys.exit(2)
+    sys.exit(1)
+del env_variables
 
-if not all((PRAKTIKUM_TOKEN, TELEGRAM_TOKEN, CHAT_ID)):
-    logger.error(
-        'Find null secret(s)',
-        'Есть пустой секрет, бот завершает работу.'
-    )
-    sys.exit(3)
     
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
@@ -64,10 +58,10 @@ HW_STATUSES = {
 def parse_homework_status(last_hw):
     homework_name = last_hw['homework_name']
     status = last_hw['status']
-    
-    verdict = 'От АПИ домашки получен неизвестный статус.'
-        
-    return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
+    if status in HW_STATUSES:
+        verdict = HW_STATUSES[status]
+        return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
+    return 'От АПИ домашки получен неизвестный статус.'
 
 
 def parse_current_state(hw_state):
@@ -76,23 +70,62 @@ def parse_current_state(hw_state):
     return parse_homework_status(hw_state['homeworks'][0])
 
 
-def get_homeworks(current_timestamp):
-    url = PRAKTIKUM_API_URL    
-    payload = {'from_date': current_timestamp}
-    homework_statuses = requests.get(url, headers=HEADERS, params=payload)
-    return homework_statuses.json()
-
-
 def send_message(message):
     return bot.send_message(CHAT_ID, message)
 
 def log_send_err_message(exception, err_description):
-    message = f'Бот упал с ошибкой: {exception} {err_description}'
+    """Отправка сообщения об ошибке в лог и в Телеграм.
+    
+    На входе имя ошибки и описание.
+    """
+    message = ('В работе бота произошла ошибка: '
+               f'{exception} {err_description}')
     logger.error(message)
     logger.info('Бот отправляет в Телеграм сообщение '
                 'об ошибке в своей работе')
     send_message(message)
     return
+
+
+def get_homeworks(current_timestamp):
+    payload = {'from_date': current_timestamp}
+    # обработать возможные ошибки ответа
+    # status == 200
+    # json ValueError ver. Python < 3
+    # успех вызова r.json() не указывает на успех ответа. 
+    # json.JSONDecodeError ver. Python >= 3
+    try:
+        response = requests.get(
+            PRAKTIKUM_API_URL,
+            headers=HEADERS,
+            params=payload
+        )        
+    except requests.ConnectionError as e:
+        message = 'Ошибка соединения.'
+        log_send_err_message(e, message)
+    except requests.Timeout as e:
+        message = f'Ошибка Timeout-а. {e}'
+        log_send_err_message(e, message)
+    except requests.RequestException as e:
+        message = f'Ошибка отправки запроса. {e}'
+        log_send_err_message(e, message)
+
+    try:
+        response.raise_for_status()    
+    except requests.exceptions.HTTPError as e:
+        message = 'Сервер домашки не вернул статус 200.'
+        log_send_err_message(e, message)
+    
+    try:
+        hw_valid_json = response.json()
+    except json.JSONDecodeError as e:
+        message = 'Не удалось прочитать json-объект.'
+        log_send_err_message(e, message)
+
+    return hw_valid_json
+
+
+
 
 def main():
 
@@ -103,8 +136,9 @@ def main():
     pause = 10
     while True:
         try:
-            current_state = get_homeworks(last_timestamp)
+            current_state = get_homeworks(current_timestamp)
             current_status = parse_current_state(current_state)
+            last_status = current_status
             if last_status != current_status:
                 logger.info('Бот отправляет сообщение '
                             'об изменении статуса ДЗ')
