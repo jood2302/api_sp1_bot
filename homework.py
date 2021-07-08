@@ -68,12 +68,17 @@ def parse_homework_status(last_hw):
     if not last_hw: # словарь в ответе АПИ пуст, то есть изменений нет
         return HW_STATUSES['notretrieved']
 
-    homework_name = last_hw['homework_name']
-    status = last_hw['status']
-    if status in HW_STATUSES:
-        verdict = HW_STATUSES[status]
-        return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
+    # Если имя работы не пришло, так её и обозвать.
+    homework_name = last_hw.get('homework_name', 'Нет имени работы')
+
+    # Если ключа 'status' нет, оповестить.
+    if 'status' in last_hw:
+        status = last_hw['status']
+        if status in HW_STATUSES:
+            verdict = HW_STATUSES[status]
+            return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
     return HW_STATUSES['unknown']
+    
 
 def send_message(message):
     return bot.send_message(CHAT_ID, message)
@@ -149,7 +154,7 @@ def main():
         try:
             current_resp_get = get_homeworks(current_timestamp)
             # в json ожидается 'homeworks'
-            last_homework = current_resp_get['homeworks']
+            last_homeworks = current_resp_get['homeworks']
         except KeyError as e:
             message = 'В ответе АПИ не найден ключ "homeworks".'
             log_send_err_message(e, message)
@@ -157,14 +162,22 @@ def main():
             time.sleep(pause)
             pause += 5
             continue
-
+        
+        if type(last_homeworks) != list:
+            time.sleep(pause)
+            pause += 5
+            continue
+        
         # в json ожидается 'current_date'
         current_timestamp = current_resp_get.get(
             'current_date',
             int(time.time())
         )
         
-        current_status = parse_homework_status(last_homework)
+        if last_homeworks:
+            current_status = parse_homework_status(last_homeworks[0])
+        else:
+            current_status = HW_STATUSES['notretrieved']
 
         if last_status != current_status:
             logger.info('Бот отправляет сообщение '
