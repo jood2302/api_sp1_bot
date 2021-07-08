@@ -25,7 +25,7 @@ logging.basicConfig(
     format=_log_format
 )
 handler = RotatingFileHandler(LOG_FILE, maxBytes=5000000, backupCount=5)
-logger.addHandler(handler) 
+logger.addHandler(handler)
 
 logger.debug("Бот стартует")
 
@@ -41,7 +41,7 @@ except KeyError as e:
     sys.exit(1)
 del env_variables
 
-    
+
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
 PRAKTIKUM_API_URL = ('https://praktikum.yandex.ru/'
@@ -56,16 +56,17 @@ HW_STATUSES = {
     'notretrieved': 'Информация об изменении статуса не получена.'
 }
 
+
 def parse_homework_status(last_hw):
     """Парсинг словаря от АПИ.
-    
+
     На входе : словарь (value по ключу 'homeworks' из json от АПИ).
     Если были изменения статуса работы, содержит в том числе ключи:
     'homework_name'
     'status'
     Если изменений статуса работы не было - словарь пуст.
     """
-    if not last_hw: # словарь в ответе АПИ пуст, то есть изменений нет
+    if not last_hw:  # словарь в ответе АПИ пуст, то есть изменений нет
         return HW_STATUSES['notretrieved']
 
     # Если имя работы не пришло, так её и обозвать.
@@ -78,14 +79,15 @@ def parse_homework_status(last_hw):
             verdict = HW_STATUSES[status]
             return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
     return HW_STATUSES['unknown']
-    
+
 
 def send_message(message):
     return bot.send_message(CHAT_ID, message)
 
+
 def log_send_err_message(exception, err_description):
     """Отправка сообщения об ошибке в лог и в Телеграм.
-    
+
     На входе имя ошибки и описание.
     """
     message = ('В работе бота произошла ошибка: '
@@ -109,7 +111,7 @@ def get_homeworks(current_timestamp):
             PRAKTIKUM_API_URL,
             headers=HEADERS,
             params=payload
-        )        
+        )
     except requests.ConnectionError as e:
         message = 'Ошибка соединения.'
         log_send_err_message(e, message)
@@ -125,16 +127,16 @@ def get_homeworks(current_timestamp):
 
     if response.status_code != requests.codes.ok:
         message = 'Сервер домашки не вернул статус 200.'
-        log_send_err_message(e, message)
+        log_send_err_message('Not HTTPStatus.OK', message)
         err_flag = 4
-    
+
     try:
         hw_valid_json = response.json()
     except json.JSONDecodeError as e:
         message = 'Не удалось прочитать json-объект.'
         log_send_err_message(e, message)
         err_flag = 5
-    
+
     if err_flag:
         return {}
     return hw_valid_json
@@ -143,7 +145,7 @@ def get_homeworks(current_timestamp):
 def main():
     # Начальное значение статуса
     last_status = HW_STATUSES['notretrieved']
-    
+
     # Начальное значение timestamp
     current_timestamp = int(time.time())
 
@@ -162,18 +164,18 @@ def main():
             time.sleep(pause)
             pause += 5
             continue
-        
+
         if type(last_homeworks) != list:
             time.sleep(pause)
             pause += 5
             continue
-        
+
         # в json ожидается 'current_date'
         current_timestamp = current_resp_get.get(
             'current_date',
             int(time.time())
         )
-        
+
         if last_homeworks:
             current_status = parse_homework_status(last_homeworks[0])
         else:
@@ -186,6 +188,7 @@ def main():
         last_status = current_status
 
         time.sleep(20 * 60)  # Опрашивать раз в двадцать минут
+
 
 if __name__ == '__main__':
     main()
