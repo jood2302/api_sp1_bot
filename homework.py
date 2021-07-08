@@ -51,24 +51,29 @@ HEADERS = {'Authorization': f'OAuth {PRAKTIKUM_TOKEN}'}
 HW_STATUSES = {
     'rejected': 'К сожалению, в работе нашлись ошибки.',
     'approved': 'Ревьюеру всё понравилось, работа зачтена!',
-    'reviewing': 'Работа отправилась на ревью.'
+    'reviewing': 'Работа отправилась на ревью.',
+    'unknown': 'От АПИ домашки получен неизвестный статус.',
+    'notretrieved': 'Информация об изменении статуса не получена.'
 }
 
-
 def parse_homework_status(last_hw):
+    """Парсинг словаря от АПИ.
+    
+    На входе : словарь (value по ключу 'homeworks' из json от АПИ).
+    Если были изменения статуса работы, содержит в том числе ключи:
+    'homework_name'
+    'status'
+    Если изменений статуса работы не было - словарь пуст.
+    """
+    if not last_hw: # словарь в ответе АПИ пуст, то есть изменений нет
+        return HW_STATUSES['notretrieved']
+
     homework_name = last_hw['homework_name']
     status = last_hw['status']
     if status in HW_STATUSES:
         verdict = HW_STATUSES[status]
         return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
-    return 'От АПИ домашки получен неизвестный статус.'
-
-
-def parse_current_state(hw_state):
-    if not hw_state['homeworks']:
-        return 'Не найдено статусов проверки работы'
-    return parse_homework_status(hw_state['homeworks'][0])
-
+    return HW_STATUSES['unknown']
 
 def send_message(message):
     return bot.send_message(CHAT_ID, message)
@@ -89,10 +94,10 @@ def log_send_err_message(exception, err_description):
 
 def get_homeworks(current_timestamp):
     payload = {'from_date': current_timestamp}
+    err_flag = None
     # обработать возможные ошибки ответа
     # status == 200
     # json ValueError ver. Python < 3
-    # успех вызова r.json() не указывает на успех ответа. 
     # json.JSONDecodeError ver. Python >= 3
     try:
         response = requests.get(
@@ -103,59 +108,71 @@ def get_homeworks(current_timestamp):
     except requests.ConnectionError as e:
         message = 'Ошибка соединения.'
         log_send_err_message(e, message)
+        err_flag = 1
     except requests.Timeout as e:
         message = f'Ошибка Timeout-а. {e}'
         log_send_err_message(e, message)
+        err_flag = 2
     except requests.RequestException as e:
         message = f'Ошибка отправки запроса. {e}'
         log_send_err_message(e, message)
+        err_flag = 3
 
-    try:
-        response.raise_for_status()    
-    except requests.exceptions.HTTPError as e:
+    if response.status_code != requests.codes.ok:
         message = 'Сервер домашки не вернул статус 200.'
         log_send_err_message(e, message)
+        err_flag = 4
     
     try:
         hw_valid_json = response.json()
     except json.JSONDecodeError as e:
         message = 'Не удалось прочитать json-объект.'
         log_send_err_message(e, message)
-
+        err_flag = 5
+    
+    if err_flag:
+        return {}
     return hw_valid_json
 
 
-
-
 def main():
-
-    last_status = ''
-    current_state = ''
-    current_timestamp = int(time.time())  # Начальное значение timestamp
+    # Начальное значение статуса
+    last_status = HW_STATUSES['notretrieved']
+    
+    # Начальное значение timestamp
+    current_timestamp = int(time.time())
 
     pause = 10
     while True:
+        if pause >= 60 * 20:
+            pause = 10
         try:
-            current_state = get_homeworks(current_timestamp)
-            current_status = parse_current_state(current_state)
-            last_status = current_status
-            if last_status != current_status:
-                logger.info('Бот отправляет сообщение '
-                            'об изменении статуса ДЗ')
-                send_message(last_status)
-            last_status = current_status
-
-            time.sleep(20 * 60)  # Опрашивать раз в двадцать минут
-
-        except Exception as e:
-            logger.error(f'Бот упал с ошибкой: {e}')
-            logger.info('Бот отправляет сообщение '
-                        'об ошибке в своей работе')
-            send_message(f'Бот упал с ошибкой: {e}')
+            current_resp_get = get_homeworks(current_timestamp)
+            # в json ожидается 'homeworks'
+            last_homework = current_resp_get['homeworks']
+        except KeyError as e:
+            message = 'В ответе АПИ не найден ключ "homeworks".'
+            log_send_err_message(e, message)
 
             time.sleep(pause)
             pause += 5
+            continue
 
+        # в json ожидается 'current_date'
+        current_timestamp = current_resp_get.get(
+            'current_date',
+            int(time.time())
+        )
+        
+        current_status = parse_homework_status(last_homework)
+
+        if last_status != current_status:
+            logger.info('Бот отправляет сообщение '
+                        'об изменении статуса ДЗ')
+            send_message(last_status)
+        last_status = current_status
+
+        time.sleep(20 * 60)  # Опрашивать раз в двадцать минут
 
 if __name__ == '__main__':
     main()
