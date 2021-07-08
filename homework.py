@@ -27,7 +27,7 @@ logging.basicConfig(
 handler = RotatingFileHandler(LOG_FILE, maxBytes=5000000, backupCount=5)
 logger.addHandler(handler)
 
-logger.debug("Бот стартует")
+logger.debug('Бот стартует')
 
 # есть ли осевые environments
 # если чего-то нет - ошибку в лог и завершение работы
