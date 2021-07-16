@@ -96,7 +96,7 @@ def log_send_err_message(exception, err_description):
 
 def get_homeworks(timestamp):
     """Запрос АПИ домашки.
-    
+
     На входе - момент времени в Unix-time.
     На выходе - словарь с последней домашкой, если получен,
     или пустой словарь, если были ошибки в соединении или ответе.
@@ -153,15 +153,15 @@ def main():
             # если ключа нет - обработка в except
             last_homeworks = current_resp_get['homeworks']
             # если список и если не пуст - парсим статус
-            if isinstance(last_homeworks, list):                
+            if isinstance(last_homeworks, list):
                 if last_homeworks:
                     current_status = parse_homework_status(
                         last_homeworks[0]
                     )
                     send_message(current_status)
-            
+
             time.sleep(5 * 60)  # Опрашивать раз в пять минут
-            # По ключу 'current_date' ожидается Unix-time 
+            # По ключу 'current_date' ожидается Unix-time
             # отметка момента ответа АПИ.
             current_timestamp = last_homeworks.get(
                 'current_date',
@@ -175,7 +175,7 @@ def main():
             message = 'В работе бота произошла ошибка.'
             log_send_err_message(e, message)
 
-            time.sleep(5)    
+            time.sleep(5)
 
 
 if __name__ == '__main__':
