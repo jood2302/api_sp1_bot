@@ -11,9 +11,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PRAKTIKUM_TOKEN = ''
-TELEGRAM_TOKEN = ''
-CHAT_ID = ''
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BASE_DIR, 'telegram_bot.log')
 
@@ -24,8 +21,10 @@ logging.basicConfig(
     level=logging.INFO,
     format=_log_format
 )
-handler = RotatingFileHandler(LOG_FILE, maxBytes=5000000, backupCount=5)
-logger.addHandler(handler)
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5000000, backupCount=5)
+stream_handler = logging.StreamHandler()
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
 
 logger.debug('Бот стартует')
 
@@ -39,8 +38,6 @@ try:
 except KeyError as e:
     logger.error(f'{e}, Не прочитаны секреты, бот завершает работу.')
     sys.exit(1)
-del env_variables
-
 
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
@@ -53,22 +50,20 @@ HW_STATUSES = {
     'approved': 'Ревьюеру всё понравилось, работа зачтена!',
     'reviewing': 'Работа отправилась на ревью.',
     'unknown': 'От АПИ домашки получен неизвестный статус.',
-    'notretrieved': 'Информация об изменении статуса не получена.'
+    'notretrieved': 'Запрос АПИ домашки не удался.'
 }
 
 
 def parse_homework_status(last_hw):
     """Парсинг словаря от АПИ.
 
-    На входе : словарь (value по ключу 'homeworks' из json от АПИ).
+    На входе : непустой словарь
+    (value по ключу 'homeworks' из json от АПИ).
     Если были изменения статуса работы, содержит в том числе ключи:
     'homework_name'
     'status'
     Если изменений статуса работы не было - словарь пуст.
     """
-    if not last_hw:  # словарь в ответе АПИ пуст, то есть изменений нет
-        return HW_STATUSES['notretrieved']
-
     # Если имя работы не пришло, так её и обозвать.
     homework_name = last_hw.get('homework_name', 'Нет имени работы')
 
@@ -99,13 +94,17 @@ def log_send_err_message(exception, err_description):
     return
 
 
-def get_homeworks(current_timestamp):
-    payload = {'from_date': current_timestamp}
-    err_flag = None
-    # обработать возможные ошибки ответа
-    # status == 200
-    # json ValueError ver. Python < 3
-    # json.JSONDecodeError ver. Python >= 3
+def get_homeworks(timestamp):
+    """Запрос АПИ домашки.
+    
+    На входе - момент времени в Unix-time.
+    На выходе - словарь с последней домашкой, если получен,
+    или пустой словарь, если были ошибки в соединении или ответе.
+    В ответе на запрос ожидается json со словарём, где есть
+    ключи 'homeworks' и 'current_date'.
+    """
+    payload = {'from_date': timestamp}
+    err_flag = False
     try:
         response = requests.get(
             PRAKTIKUM_API_URL,
@@ -115,27 +114,28 @@ def get_homeworks(current_timestamp):
     except requests.ConnectionError as e:
         message = 'Ошибка соединения.'
         log_send_err_message(e, message)
-        err_flag = 1
+        err_flag = True
     except requests.Timeout as e:
         message = f'Ошибка Timeout-а. {e}'
         log_send_err_message(e, message)
-        err_flag = 2
+        err_flag = True
     except requests.RequestException as e:
         message = f'Ошибка отправки запроса. {e}'
         log_send_err_message(e, message)
-        err_flag = 3
+        err_flag = True
 
     if response.status_code != requests.codes.ok:
         message = 'Сервер домашки не вернул статус 200.'
         log_send_err_message('Not HTTPStatus.OK', message)
-        err_flag = 4
+        err_flag = True
 
     try:
+        # json.JSONDecodeError ver. Python >= 3
         hw_valid_json = response.json()
     except json.JSONDecodeError as e:
         message = 'Не удалось прочитать json-объект.'
         log_send_err_message(e, message)
-        err_flag = 5
+        err_flag = True
 
     if err_flag:
         return {}
@@ -143,51 +143,39 @@ def get_homeworks(current_timestamp):
 
 
 def main():
-    # Начальное значение статуса
-    last_status = HW_STATUSES['notretrieved']
-
-    # Начальное значение timestamp
+    # Начальное значение timestamp - момент старта бота
     current_timestamp = int(time.time())
 
-    pause = 10
     while True:
-        if pause >= 60 * 20:
-            pause = 10
         try:
             current_resp_get = get_homeworks(current_timestamp)
-            # в json ожидается 'homeworks'
+            # ожидается список по ключу 'homeworks'
+            # если ключа нет - обработка в except
             last_homeworks = current_resp_get['homeworks']
+            # если список и если не пуст - парсим статус
+            if isinstance(last_homeworks, list):                
+                if last_homeworks:
+                    current_status = parse_homework_status(
+                        last_homeworks[0]
+                    )
+                    send_message(current_status)
+            
+            time.sleep(5 * 60)  # Опрашивать раз в пять минут
+            # По ключу 'current_date' ожидается Unix-time 
+            # отметка момента ответа АПИ.
+            current_timestamp = last_homeworks.get(
+                'current_date',
+                int(time.time())
+            )
+
         except KeyError as e:
             message = 'В ответе АПИ не найден ключ "homeworks".'
             log_send_err_message(e, message)
+        except Exception as e:
+            message = 'В работе бота произошла ошибка.'
+            log_send_err_message(e, message)
 
-            time.sleep(pause)
-            pause += 5
-            continue
-
-        if type(last_homeworks) != list:
-            time.sleep(pause)
-            pause += 5
-            continue
-
-        # в json ожидается 'current_date'
-        current_timestamp = current_resp_get.get(
-            'current_date',
-            int(time.time())
-        )
-
-        if last_homeworks:
-            current_status = parse_homework_status(last_homeworks[0])
-        else:
-            current_status = HW_STATUSES['notretrieved']
-
-        if last_status != current_status:
-            logger.info('Бот отправляет сообщение '
-                        'об изменении статуса ДЗ')
-            send_message(last_status)
-        last_status = current_status
-
-        time.sleep(20 * 60)  # Опрашивать раз в двадцать минут
+            time.sleep(5)    
 
 
 if __name__ == '__main__':
