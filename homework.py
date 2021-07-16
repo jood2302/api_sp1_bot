@@ -50,7 +50,6 @@ HW_STATUSES = {
     'approved': 'Ревьюеру всё понравилось, работа зачтена!',
     'reviewing': 'Работа отправилась на ревью.',
     'unknown': 'От АПИ домашки получен неизвестный статус.',
-    'notretrieved': 'Запрос АПИ домашки не удался.'
 }
 
 
@@ -62,7 +61,6 @@ def parse_homework_status(last_hw):
     Если были изменения статуса работы, содержит в том числе ключи:
     'homework_name'
     'status'
-    Если изменений статуса работы не было - словарь пуст.
     """
     # Если имя работы не пришло, так её и обозвать.
     homework_name = last_hw.get('homework_name', 'Нет имени работы')
@@ -73,7 +71,9 @@ def parse_homework_status(last_hw):
         if status in HW_STATUSES:
             verdict = HW_STATUSES[status]
             return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
-    return HW_STATUSES['unknown']
+    verdict = HW_STATUSES['unknown']
+    return (f'На запрос статуса работы "{homework_name}" '
+            f'получено: \n\n{verdict}')
 
 
 def send_message(message):
