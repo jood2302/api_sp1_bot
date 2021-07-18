@@ -91,7 +91,6 @@ def log_send_err_message(exception, err_description):
     logger.info('Бот отправляет в Телеграм сообщение '
                 'об ошибке в своей работе')
     send_message(message)
-    return
 
 
 def get_homeworks(timestamp):
@@ -104,41 +103,33 @@ def get_homeworks(timestamp):
     ключи 'homeworks' и 'current_date'.
     """
     payload = {'from_date': timestamp}
-    err_flag = False
+    hw_valid_json = dict()
     try:
         response = requests.get(
             PRAKTIKUM_API_URL,
             headers=HEADERS,
             params=payload
         )
+        if response.status_code != requests.codes.ok:
+            message = 'Сервер домашки не вернул статус 200.'
+            log_send_err_message('Not HTTPStatus.OK', message)
+            return hw_valid_json
+
+        # json.JSONDecodeError ver. Python >= 3
+        hw_valid_json = response.json()
     except requests.ConnectionError as e:
         message = 'Ошибка соединения.'
         log_send_err_message(e, message)
-        err_flag = True
     except requests.Timeout as e:
         message = f'Ошибка Timeout-а. {e}'
         log_send_err_message(e, message)
-        err_flag = True
     except requests.RequestException as e:
         message = f'Ошибка отправки запроса. {e}'
         log_send_err_message(e, message)
-        err_flag = True
-
-    if response.status_code != requests.codes.ok:
-        message = 'Сервер домашки не вернул статус 200.'
-        log_send_err_message('Not HTTPStatus.OK', message)
-        err_flag = True
-
-    try:
-        # json.JSONDecodeError ver. Python >= 3
-        hw_valid_json = response.json()
     except json.JSONDecodeError as e:
         message = 'Не удалось прочитать json-объект.'
         log_send_err_message(e, message)
-        err_flag = True
 
-    if err_flag:
-        return {}
     return hw_valid_json
 
 
