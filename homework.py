@@ -48,8 +48,7 @@ HEADERS = {'Authorization': f'OAuth {PRAKTIKUM_TOKEN}'}
 HW_STATUSES = {
     'rejected': 'К сожалению, в работе нашлись ошибки.',
     'approved': 'Ревьюеру всё понравилось, работа зачтена!',
-    'reviewing': 'Работа отправилась на ревью.',
-    'unknown': 'От АПИ домашки получен неизвестный статус.',
+    'reviewing': 'Работа отправилась на ревью.'
 }
 
 
@@ -64,16 +63,15 @@ def parse_homework_status(last_hw):
     """
     # Если имя работы не пришло, так её и обозвать.
     homework_name = last_hw.get('homework_name', 'Нет имени работы')
-
-    # Если ключа 'status' нет, оповестить.
-    if 'status' in last_hw:
-        status = last_hw['status']
-        if status in HW_STATUSES:
-            verdict = HW_STATUSES[status]
-            return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
-    verdict = HW_STATUSES['unknown']
-    return (f'На запрос статуса работы "{homework_name}" '
-            f'получено: \n\n{verdict}')
+    try:
+        verdict = HW_STATUSES[last_hw['status']]
+    except KeyError as e:
+        message = ('Ошибка ключа или во входном last_hw'
+                   'или в глобальном HW_STATUSES {e}')
+        log_send_err_message(e, message)
+        return (f'На запрос статуса работы "{homework_name}" '
+                'получен неизвестный статус.')
+    return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
 
 
 def send_message(message):
@@ -89,7 +87,7 @@ def log_send_err_message(exception, err_description):
                f'{exception} {err_description}')
     logger.error(message)
     logger.info('Бот отправляет в Телеграм сообщение '
-                'об ошибке в своей работе')
+                'об ошибке в своей работе.')
     send_message(message)
 
 
@@ -141,31 +139,35 @@ def main():
         try:
             current_resp_get = get_homeworks(current_timestamp)
             # ожидается список по ключу 'homeworks'
-            # если ключа нет - обработка в except
+            # если ключа нет - обработка KeyError в блоке except.
             last_homeworks = current_resp_get['homeworks']
             # если список и если не пуст - парсим статус
-            if isinstance(last_homeworks, list):
-                if last_homeworks:
-                    current_status = parse_homework_status(
-                        last_homeworks[0]
-                    )
-                    send_message(current_status)
+            if isinstance(last_homeworks, list) and last_homeworks:
+                current_status = parse_homework_status(
+                    last_homeworks[0]
+                )
+                logger.info('Бот отправляет в Телеграм сообщение '
+                            'об обновлении статуса домашки.')
+                send_message(current_status)
 
             time.sleep(5 * 60)  # Опрашивать раз в пять минут
+
             # По ключу 'current_date' ожидается Unix-time
             # отметка момента ответа АПИ.
-            current_timestamp = last_homeworks.get(
-                'current_date',
-                int(time.time())
-            )
+            # Если пришло None, время запроса не обновлять.
+            # Если ключа нет - обработка KeyError в блоке except.
+            last_timestapm = current_resp_get['current_date']
+            if last_timestapm:
+                current_timestamp = last_timestapm
 
         except KeyError as e:
-            message = 'В ответе АПИ не найден ключ "homeworks".'
+            message = ('В ответе АПИ не найден(ы) ключ(и)'
+                       '"homeworks", "current_date".')
             log_send_err_message(e, message)
+            time.sleep(5)
         except Exception as e:
             message = 'В работе бота произошла ошибка.'
             log_send_err_message(e, message)
-
             time.sleep(5)
 
 
