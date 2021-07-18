@@ -57,7 +57,7 @@ def parse_homework_status(last_hw):
 
     На входе : непустой словарь
     (value по ключу 'homeworks' из json от АПИ).
-    Если были изменения статуса работы, содержит в том числе ключи:
+    Если были изменения статуса работы, должен содержать в том числе ключи:
     'homework_name'
     'status'
     """
@@ -132,7 +132,7 @@ def get_homeworks(timestamp):
 
 
 def main():
-    # Начальное значение timestamp - момент старта бота
+    # Начальное значение timestamp - момент старта main()
     current_timestamp = int(time.time())
 
     while True:
