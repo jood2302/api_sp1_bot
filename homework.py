@@ -56,7 +56,7 @@ def parse_homework_status(last_hw):
     """Парсинг словаря от АПИ.
 
     На входе : непустой словарь
-    (value по ключу 'homeworks' из json от АПИ).
+    (первый эл-т списка по ключу 'homeworks' из json от АПИ).
     Если были изменения статуса работы, должен содержать в том числе ключи:
     'homework_name'
     'status'
@@ -64,10 +64,11 @@ def parse_homework_status(last_hw):
     # Если имя работы не пришло, так её и обозвать.
     homework_name = last_hw.get('homework_name', 'Нет имени работы')
     try:
-        verdict = HW_STATUSES[last_hw['status']]
+        received_status = last_hw['status']
+        verdict = HW_STATUSES[received_status]
     except KeyError as e:
         message = ('Ошибка ключа или во входном last_hw'
-                   'или в глобальном HW_STATUSES {e}')
+                   'или в глобальном HW_STATUSES')
         log_send_err_message(e, message)
         return (f'На запрос статуса работы "{homework_name}" '
                 'получен неизвестный статус.')
@@ -111,7 +112,7 @@ def get_homeworks(timestamp):
         if response.status_code != requests.codes.ok:
             message = 'Сервер домашки не вернул статус 200.'
             log_send_err_message('Not HTTPStatus.OK', message)
-            return hw_valid_json
+            return {}
 
         # json.JSONDecodeError ver. Python >= 3
         hw_valid_json = response.json()
@@ -161,8 +162,8 @@ def main():
                 current_timestamp = last_timestapm
 
         except KeyError as e:
-            message = ('В ответе АПИ не найден(ы) ключ(и)'
-                       '"homeworks", "current_date".')
+            message = ('В ответе АПИ не найден ключ'
+                       '"homeworks" или "current_date".')
             log_send_err_message(e, message)
             time.sleep(5)
         except Exception as e:
