@@ -68,7 +68,7 @@ def parse_homework_status(last_hw):
         verdict = HW_STATUSES[received_status]
     except KeyError as e:
         message = ('Ошибка ключа или во входном last_hw'
-                   'или в глобальном HW_STATUSES')
+                   ' или в глобальном HW_STATUSES')
         log_send_err_message(e, message)
         return (f'На запрос статуса работы "{homework_name}" '
                 'получен неизвестный статус.')
