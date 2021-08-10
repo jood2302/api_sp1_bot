@@ -41,7 +41,7 @@ except KeyError as e:
 
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
-PRAKTIKUM_API_URL = ('https://praktikum.yandex.ru/'
+PRAKTIKUM_API_URL = ('https://practicum.yandex.ru/'
                      'api/user_api/homework_statuses/')
 HEADERS = {'Authorization': f'OAuth {PRAKTIKUM_TOKEN}'}
 
